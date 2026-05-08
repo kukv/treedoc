@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "bright-room": {
+      "source": {
+        "source": "github",
+        "repo": "bright-room/br-claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dev-workflow@br-claude-plugins": true
+  }
+}

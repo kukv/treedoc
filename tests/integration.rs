@@ -401,14 +401,21 @@ fn cli_format_markdown_wraps_tree_in_code_fence() {
         .arg(&tmp)
         .output()
         .expect("failed to run treedoc binary");
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     // Must start and end with a fence and contain the tree in between.
     assert!(stdout.starts_with("```\n"), "stdout: {stdout:?}");
     assert!(stdout.trim_end().ends_with("```"), "stdout: {stdout:?}");
     assert!(stdout.contains("├── src/"), "stdout: {stdout:?}");
-    assert!(!stdout.contains('\x1b'), "should not contain ANSI: {stdout:?}");
+    assert!(
+        !stdout.contains('\x1b'),
+        "should not contain ANSI: {stdout:?}"
+    );
 
     fs::remove_dir_all(&tmp).unwrap();
 }
@@ -427,7 +434,10 @@ fn cli_format_plain_emits_no_color() {
         .expect("failed to run treedoc binary");
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains('\x1b'), "should not contain ANSI: {stdout:?}");
+    assert!(
+        !stdout.contains('\x1b'),
+        "should not contain ANSI: {stdout:?}"
+    );
     assert!(!stdout.starts_with("```"), "no fence for plain: {stdout:?}");
 
     fs::remove_dir_all(&tmp).unwrap();

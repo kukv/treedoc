@@ -7,7 +7,10 @@
   "prConcurrentLimit": 0,
   "prHourlyLimit": 0,
   "separateMinorPatch": true,
-  "terraform": {
+  "cargo": {
+    "enabled": true
+  },
+  "mise": {
     "enabled": true
   },
   "lockFileMaintenance": {
@@ -19,5 +22,19 @@
   "major": {
     "minimumReleaseAge": "14 days",
     "automerge": false
-  }
+  },
+  "packageRules": [
+    {
+      "description": "Group all non-major Rust crate updates into a single PR",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "cargo dependencies"
+    },
+    {
+      "description": "Group Rust toolchain updates managed by mise",
+      "matchManagers": ["mise"],
+      "matchPackageNames": ["rust"],
+      "groupName": "rust toolchain"
+    }
+  ]
 }

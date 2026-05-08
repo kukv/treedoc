@@ -1,9 +1,9 @@
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use treedoc::{
     build, init_comments, render, Comments, RenderOptions, WalkOptions, SIDECAR_FILENAME,
 };
@@ -51,6 +51,20 @@ struct ShowArgs {
     /// Disable colored output.
     #[arg(long)]
     no_color: bool,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Console)]
+    format: Format,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum Format {
+    /// Colored tree intended for the terminal (default).
+    Console,
+    /// Plain ASCII tree without colors.
+    Plain,
+    /// Tree wrapped in a Markdown code fence.
+    Markdown,
 }
 
 #[derive(Args, Debug)]
@@ -105,14 +119,21 @@ fn run_show(args: ShowArgs) -> Result<()> {
         use_gitignore: !args.no_ignore,
         max_depth: args.depth,
     };
-    let render_opts = RenderOptions {
-        color: should_use_color(args.no_color),
+    let color = match args.format {
+        Format::Console => should_use_color(args.no_color),
+        Format::Plain | Format::Markdown => false,
     };
     let root = build(&args.path, &walk)?;
     let comments = Comments::load(&args.path)?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    render(&mut out, &root, &comments, &render_opts)?;
+    if matches!(args.format, Format::Markdown) {
+        writeln!(out, "```")?;
+    }
+    render(&mut out, &root, &comments, &RenderOptions { color })?;
+    if matches!(args.format, Format::Markdown) {
+        writeln!(out, "```")?;
+    }
     Ok(())
 }
 

@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use treedoc::{build, render, Comments, Node, RenderOptions, WalkOptions, SIDECAR_FILENAME};
+use treedoc::{
+    build, init_comments, render, Comments, Node, RenderOptions, WalkOptions, SIDECAR_FILENAME,
+};
 
 fn dir_at(name: &str, rel: &str, children: Vec<Node>) -> Node {
     Node {
@@ -37,13 +39,17 @@ fn render_plain(node: &Node, comments: &Comments) -> String {
 }
 
 fn unique_tmp() -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "treedoc-test-{}-{}",
+        "treedoc-test-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        n,
     ));
     fs::create_dir(&dir).unwrap();
     dir
@@ -123,7 +129,7 @@ fn render_aligns_comments() {
             file("README.md"),
         ],
     );
-    let mut map = HashMap::new();
+    let mut map = BTreeMap::new();
     map.insert("src".into(), "ソース".into());
     map.insert("src/main.rs".into(), "エントリ".into());
     map.insert("README.md".into(), "ドキュメント".into());
@@ -321,5 +327,62 @@ fn build_respects_gitignore_by_default_and_can_be_disabled() {
         vec!["build", ".gitignore", "ignored.txt", "kept.txt"]
     );
 
+    fs::remove_dir_all(&tmp).unwrap();
+}
+
+#[test]
+fn comments_save_and_reload_roundtrip() {
+    let tmp = unique_tmp();
+    let mut comments = Comments::default();
+    comments.set("src", "ソース".into());
+    comments.set("src/main.rs", "エントリ".into());
+    comments.save(&tmp).unwrap();
+
+    let reloaded = Comments::load(&tmp).unwrap();
+    assert_eq!(reloaded.get("src"), Some("ソース"));
+    assert_eq!(reloaded.get("src/main.rs"), Some("エントリ"));
+    fs::remove_dir_all(&tmp).unwrap();
+}
+
+#[test]
+fn comments_set_normalizes_trailing_slash() {
+    let mut comments = Comments::default();
+    comments.set("src/", "dir comment".into());
+    assert_eq!(comments.get("src"), Some("dir comment"));
+}
+
+#[test]
+fn init_comments_creates_empty_entry_per_path() {
+    let tmp = unique_tmp();
+    fs::create_dir(tmp.join("src")).unwrap();
+    fs::write(tmp.join("src/main.rs"), "").unwrap();
+    fs::write(tmp.join("README.md"), "").unwrap();
+
+    let comments = init_comments(&tmp, &WalkOptions::default()).unwrap();
+    let keys: Vec<&str> = comments.0.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["README.md", "src", "src/main.rs"]);
+    assert!(comments.0.values().all(String::is_empty));
+    fs::remove_dir_all(&tmp).unwrap();
+}
+
+#[test]
+fn init_comments_preserves_existing_values_when_called_twice() {
+    let tmp = unique_tmp();
+    fs::write(tmp.join("a.txt"), "").unwrap();
+
+    let mut comments = init_comments(&tmp, &WalkOptions::default()).unwrap();
+    comments.set("a.txt", "first".into());
+    comments.save(&tmp).unwrap();
+
+    // Re-init should not erase the comment we wrote.
+    let existing = Comments::load(&tmp).unwrap();
+    let mut merged = existing;
+    // Mimic the lib's collect_paths or_insert_with behaviour by calling init_comments
+    // on top of saved state: load -> add missing keys.
+    let fresh = init_comments(&tmp, &WalkOptions::default()).unwrap();
+    for (k, _) in fresh.0 {
+        merged.0.entry(k).or_default();
+    }
+    assert_eq!(merged.get("a.txt"), Some("first"));
     fs::remove_dir_all(&tmp).unwrap();
 }

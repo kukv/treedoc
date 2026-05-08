@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -18,8 +18,8 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
-#[derive(Default)]
-pub struct Comments(pub HashMap<String, String>);
+#[derive(Default, Clone)]
+pub struct Comments(pub BTreeMap<String, String>);
 
 impl Comments {
     pub fn load(root: &Path) -> Result<Self> {
@@ -29,7 +29,7 @@ impl Comments {
         }
         let text = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let raw: HashMap<String, String> = serde_yaml::from_str(&text)
+        let raw: BTreeMap<String, String> = serde_yaml::from_str(&text)
             .with_context(|| format!("failed to parse {}", path.display()))?;
         let normalized = raw
             .into_iter()
@@ -38,13 +38,32 @@ impl Comments {
         Ok(Self(normalized))
     }
 
+    pub fn save(&self, root: &Path) -> Result<()> {
+        let path = root.join(SIDECAR_FILENAME);
+        let text = serde_yaml::to_string(&self.0)
+            .with_context(|| format!("failed to serialize {}", path.display()))?;
+        fs::write(&path, text).with_context(|| format!("failed to write {}", path.display()))?;
+        Ok(())
+    }
+
     pub fn get(&self, rel_path: &str) -> Option<&str> {
         self.0.get(rel_path).map(String::as_str)
+    }
+
+    pub fn set(&mut self, rel_path: &str, comment: String) {
+        self.0.insert(normalize_key(rel_path), comment);
     }
 }
 
 fn normalize_key(k: &str) -> String {
     k.trim_end_matches('/').to_string()
+}
+
+fn nonempty_comment(comments: &Comments, rel_path: &str) -> Option<String> {
+    comments
+        .get(rel_path)
+        .filter(|c| !c.is_empty())
+        .map(String::from)
 }
 
 #[derive(Clone, Debug)]
@@ -149,6 +168,24 @@ fn sort_children(children: &mut [Node]) {
     children.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
 }
 
+/// Walk the tree and produce a Comments seeded with empty strings for every
+/// node (root excluded). Used by `treedoc init`.
+pub fn init_comments(root: &Path, opts: &WalkOptions) -> Result<Comments> {
+    let tree = build(root, opts)?;
+    let mut comments = Comments::default();
+    collect_paths(&tree, &mut comments);
+    Ok(comments)
+}
+
+fn collect_paths(node: &Node, comments: &mut Comments) {
+    if !node.rel_path.is_empty() {
+        comments.0.entry(node.rel_path.clone()).or_default();
+    }
+    for child in &node.children {
+        collect_paths(child, comments);
+    }
+}
+
 struct Line {
     prefix: String,
     name: String,
@@ -174,7 +211,7 @@ pub fn render<W: Write>(
         prefix: String::new(),
         name: node.name.clone(),
         is_dir: node.is_dir,
-        comment: comments.get(&node.rel_path).map(String::from),
+        comment: nonempty_comment(comments, &node.rel_path),
     });
     let mut parent_last = Vec::new();
     collect_lines(&node.children, &mut parent_last, comments, &mut lines);
@@ -230,7 +267,7 @@ fn collect_lines(
             prefix,
             name: child.name.clone(),
             is_dir: child.is_dir,
-            comment: comments.get(&child.rel_path).map(String::from),
+            comment: nonempty_comment(comments, &child.rel_path),
         });
         parent_last.push(is_last);
         collect_lines(&child.children, parent_last, comments, out);

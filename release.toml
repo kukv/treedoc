@@ -1,0 +1,14 @@
+# cargo-release configuration. See:
+# https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
+
+# Tag as `v0.1.0` to match cargo-dist's expected format.
+tag-name = "v{{version}}"
+
+# Don't publish to crates.io for now; flip to true when ready.
+publish = false
+
+# Push the commit and tag to origin so cargo-dist's release.yml fires.
+push = true
+
+# Single commit per release (instead of one for the bump and one post-release).
+consolidate-commits = true

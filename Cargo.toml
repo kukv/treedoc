@@ -2,8 +2,13 @@
 name = "treedoc"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A tree(1)-style directory listing with comments from a YAML sidecar."
+license = "MIT"
+repository = "https://github.com/kukv/treedoc"
+homepage = "https://github.com/kukv/treedoc"
+readme = "README.md"
+keywords = ["tree", "cli", "documentation", "filesystem"]
+categories = ["command-line-utilities", "filesystem"]
 
 [dependencies]
 anyhow = "1.0.102"
